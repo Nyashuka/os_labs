@@ -1,7 +1,7 @@
-#include <locale.h>
+//#include <locale.h>
 #include "sys/wait.h"
 #include "stdio.h"
-#include "stdlib.h"
+//#include "stdlib.h"
 #include "unistd.h"
 
 int main(int argc, char *argv[])
@@ -24,12 +24,13 @@ int main(int argc, char *argv[])
     }
     else
     {
-        printf("parent %d\n", getpid());
+        //printf("parent %d\n", getpid());
         waitpid(pid, &status, 0);
 
         if(status != 0)
             printf("Failed, exit code = %d\n", status);
-
+        else
+            printf("Succes!\n");
     }
 
     return 0;
