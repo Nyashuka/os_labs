@@ -1,10 +1,8 @@
-use alloc::string::String;
 use core::ptr::null_mut;
 use crate::{print, println};
 use crate::vga_buf::SCREEN;
-use pc_keyboard::{DecodedKey, KeyCode};
+use pc_keyboard::{DecodedKey,KeyCode};
 use lazy_static::lazy_static;
-use dict::{Dict, DictIFace};
 
 lazy_static! {
     static ref SH: spin::Mutex<Shell> = spin::Mutex::new({
@@ -21,6 +19,28 @@ pub fn handle_keyboard_interrupt(key: DecodedKey) {
 }
 
 // REGION of MY METHODS
+
+pub fn mu_split(arr: &[u8;80]) -> [String; 2]
+{
+    let mut argv: [String; 2] = ["".to_string(), "".to_string()];
+
+    let mut current_str: String = String::from("");
+    let mut counter = 0;
+
+    for i in 0..arr.len() {
+        if arr[i] != b' '{
+            current_str.push((arr[i] as char));
+        }
+        if (arr[i] == b' ' || i == arr.len() - 1) && current_str != ""
+        {
+            argv[counter] = current_str;
+            current_str = String::from("");
+            counter += 1;
+        }
+    }
+
+    return argv;
+}
 
 pub fn read_command_from_console(key: DecodedKey)
 {
@@ -39,18 +59,16 @@ struct Shell {
 }
 
 
-pub fn execute_command(&buf: [u8; 80])
+pub fn execute_command(buf: &[u8; 80])
 {
-    cmd = String::from_utf8_lossy(buf);
+    let cmd = mu_split(&buf);
 
-    match cmd {
-        "echo" => echo_command(cmd)
-    }
+
 }
 
-pub fn echo_command(&str: String)
+pub fn echo_command(res_str: &String)
 {
-    print!(str);
+    print!("{}", res_str);
 }
 
 impl Shell {
@@ -69,6 +87,9 @@ impl Shell {
                     print!("{}", self.buf[i] as char)
                 }
                 println!()
+            }
+            b' ' => {
+
             }
             _ => {
                 self.buf[self.buf_len] = key;

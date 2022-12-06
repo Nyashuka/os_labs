@@ -30,7 +30,7 @@ fn my_timer_handler() {
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
-    interrupts::set_keyboard_interrupt_handler(shell::read_command_from_console);
+    interrupts::set_keyboard_interrupt_handler(shell::on_key_pressed);
     interrupts::set_timer_interrupt_handler(my_timer_handler);
     interrupts::init();
 
