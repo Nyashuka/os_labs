@@ -2,16 +2,13 @@ use lazy_static::lazy_static;
 use x86_64::structures::idt::{InterruptStackFrame, InterruptDescriptorTable};
 use pic8259::ChainedPics;
 use x86_64::instructions::port::Port;
-use pc_keyboard::{layouts, DecodedKey, HandleControl, Keyboard, ScancodeSet1, KeyCode};
+use pc_keyboard::{layouts, DecodedKey, HandleControl, Keyboard, ScancodeSet1};
 use spin::Mutex;
-use crate::{print, vga_buf};
-use crate::vga_buf::Screen;
 
 const PIC_1_OFFSET: u8 = 32;
 const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
 const TIMER_INTERRUPT: u8 = PIC_1_OFFSET;
 const KEYBOARD_INTERRUPT: u8 = PIC_1_OFFSET + 1;
-
 
 lazy_static! {
     static ref IDT: InterruptDescriptorTable = {

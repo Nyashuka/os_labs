@@ -2,6 +2,7 @@
 #![no_main] // disable all Rust-level entry points
 #![feature(abi_x86_interrupt)]
 
+
 use core::fmt::Write;
 use core::panic::PanicInfo;
 use core::ptr::write;
@@ -30,9 +31,10 @@ fn my_timer_handler() {
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
-    interrupts::set_keyboard_interrupt_handler(shell::on_key_pressed);
+    interrupts::set_keyboard_interrupt_handler(my_keyboard_handler);
     interrupts::set_timer_interrupt_handler(my_timer_handler);
     interrupts::init();
+
 
     loop {}
 }

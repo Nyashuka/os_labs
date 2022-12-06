@@ -1,8 +1,8 @@
-use core::ptr::null_mut;
-use crate::{print, println};
 use crate::vga_buf::SCREEN;
-use pc_keyboard::{DecodedKey,KeyCode};
+use crate::{print, println};
+use core::ptr::null_mut;
 use lazy_static::lazy_static;
+use pc_keyboard::{DecodedKey, KeyCode};
 
 lazy_static! {
     static ref SH: spin::Mutex<Shell> = spin::Mutex::new({
@@ -20,34 +20,50 @@ pub fn handle_keyboard_interrupt(key: DecodedKey) {
 
 // REGION of MY METHODS
 
-pub fn mu_split(arr: &[u8;80]) -> [String; 2]
-{
-    let mut argv: [String; 2] = ["".to_string(), "".to_string()];
+pub fn mu_split(arr: [u8; 80], buf_len: usize) -> ([u8; 10], [u8; 70]) {
+    let mut cmd: [u8; 10] = [b'\0'; 10];
+    let mut argument: [u8; 70] = [b'\0'; 70];
 
-    let mut current_str: String = String::from("");
-    let mut counter = 0;
+    let mut i = 0;
 
-    for i in 0..arr.len() {
-        if arr[i] != b' '{
-            current_str.push((arr[i] as char));
-        }
-        if (arr[i] == b' ' || i == arr.len() - 1) && current_str != ""
-        {
-            argv[counter] = current_str;
-            current_str = String::from("");
-            counter += 1;
-        }
+    while i < 9 || arr[i] != b' ' {
+        cmd[i] = arr[i];
+        i += 1;
+    }
+    i += 1;
+    let mut j = 0;
+    while i < buf_len {
+        argument[j] = arr[i];
+        i += 1;
+        j += 1;
     }
 
-    return argv;
+    return (cmd, argument);
 }
 
-pub fn read_command_from_console(key: DecodedKey)
-{
-    match key {
-        //DecodedKey::RawKey(KeyCode::Backspace) => ,
-        DecodedKey::Unicode(k) => print!("{}", k),
-        _ => print!("_")
+pub fn compare_str_with_arr(str_for_compare: &str, arr: [u8; 10]) -> bool {
+    let mut are_the_same = true;
+
+    let mut i = 0;
+    for symbol in str_for_compare.bytes() {
+        if symbol != arr[i] {
+            are_the_same = false;
+        }
+        i += 1;
+    }
+    return are_the_same;
+}
+
+pub fn execute_command(argv: ([u8; 10], [u8; 70])) {
+    if compare_str_with_arr("echo", argv.0) {
+        echo_command(argv.1);
+    }
+}
+
+fn echo_command(argv: [u8; 70]) {
+    println!();
+    for symbol in argv {
+        print!("{}", symbol);
     }
 }
 
@@ -56,19 +72,6 @@ pub fn read_command_from_console(key: DecodedKey)
 struct Shell {
     buf: [u8; 80],
     buf_len: usize,
-}
-
-
-pub fn execute_command(buf: &[u8; 80])
-{
-    let cmd = mu_split(&buf);
-
-
-}
-
-pub fn echo_command(res_str: &String)
-{
-    print!("{}", res_str);
 }
 
 impl Shell {
@@ -82,14 +85,19 @@ impl Shell {
     pub fn on_key_pressed(&mut self, key: u8) {
         match key {
             b'\n' => {
-                print!("\nImplement command execution: ");
-                for i in 0..self.buf_len {
-                    print!("{}", self.buf[i] as char)
-                }
-                println!()
-            }
-            b' ' => {
+                let argv = mu_split(self.buf, self.buf_len);
 
+                execute_command(argv);
+            }
+            8 => {
+                SCREEN.lock().delete_last_symbol();
+            }
+            32 =>
+            // key code of space button
+            {
+                self.buf[self.buf_len] = b' ';
+                self.buf_len += 1;
+                print!("{}", key as char);
             }
             _ => {
                 self.buf[self.buf_len] = key;

@@ -41,8 +41,6 @@ lazy_static! {
     );
 }
 
-
-
 pub struct AsciiChar {
     pub char_byte: u8,
     pub color_byte: u8,
@@ -64,6 +62,15 @@ impl core::fmt::Write for Screen {
 
 impl Screen {
 
+    pub fn delete_last_symbol(&mut self)
+    {
+        if self.col > 0
+        {
+            self.col -= 1;
+        }
+        self.write_char_byte(self.line * BUF_WIDTH + self.col, b' ');     
+    }
+
     pub fn clear(&mut self) {
         for i in 0..BUF_HEIGHT {
             for j in 0..BUF_WIDTH {
@@ -72,11 +79,6 @@ impl Screen {
         }
         self.col = 0;
         self.line = 0;
-    }
-
-    pub fn delete_last_symbol(&mut self)
-    {
-        self.write_char_byte(self.line * BUF_WIDTH + self.col, 0x00);
     }
 
     pub fn print(&mut self, s: &str) {
