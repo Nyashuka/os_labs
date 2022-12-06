@@ -1,7 +1,7 @@
 use core::fmt;
 use lazy_static::lazy_static;
 use spin::Mutex;
-use x86_64::instructions::interrupts::without_interrupts;
+use x86_64::instructions::{interrupts::without_interrupts, port::{Port, PortGeneric, ReadWriteAccess}};
 
 #[macro_export]
 macro_rules! print {
@@ -62,15 +62,32 @@ impl core::fmt::Write for Screen {
 
 impl Screen {
 
-    pub fn delete_last_symbol(&mut self)
+    pub fn delete_last_symbol(&mut self, min_index: u32)
     {
-        if self.col > 0
+        if self.col > min_index
         {
             self.col -= 1;
         }
-        self.write_char_byte(self.line * BUF_WIDTH + self.col, b' ');     
+        self.write_char_byte(self.line * BUF_WIDTH + self.col, b' ');   
+        self.move_cursor();
     }
 
+    pub fn set_cursor_position(&mut self, position: u16) {
+        unsafe {
+            let mut cmd_port: PortGeneric<u16, ReadWriteAccess> = Port::new(0x3D4);
+            let mut data_port: PortGeneric<u16, ReadWriteAccess> = Port::new(0x3D5);
+
+            cmd_port.write(14 as u16);
+            data_port.write((position >> 8) & 0x00FF);
+            cmd_port.write(15 as u16);
+            data_port.write(position & 0x00FF);
+        }
+    }
+    
+    pub fn move_cursor(&mut self){
+        self.set_cursor_position((self.line * BUF_WIDTH + self.col) as u16);
+    }
+    
     pub fn clear(&mut self) {
         for i in 0..BUF_HEIGHT {
             for j in 0..BUF_WIDTH {
@@ -101,6 +118,7 @@ impl Screen {
                     }
                 }
             }
+            self.move_cursor();
         }
     }
 
