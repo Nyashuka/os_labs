@@ -87,6 +87,28 @@ impl Screen {
     pub fn move_cursor(&mut self){
         self.set_cursor_position((self.line * BUF_WIDTH + self.col) as u16);
     }
+
+    pub fn push_row_to_right(&mut self, row_start: u32)
+    {
+        let mut column = BUF_WIDTH-2;
+        while column != row_start 
+        {
+            let read_char = self.read_char(self.line * BUF_WIDTH + column);
+
+            self.write_char(self.line * BUF_WIDTH + column+ 1, read_char);
+            
+            column -= 1;
+        }
+
+        let read_char = self.read_char(self.line * BUF_WIDTH + column);
+
+        self.write_char(self.line * BUF_WIDTH + column+ 1, read_char);
+    }
+
+    pub fn move_print_to(&mut self, x: u32)
+    {
+        self.col = x;
+    }
     
     pub fn clear(&mut self) {
         for i in 0..BUF_HEIGHT {
@@ -96,6 +118,7 @@ impl Screen {
         }
         self.col = 0;
         self.line = 0;
+        self.move_cursor();
     }
 
     pub fn print(&mut self, s: &str) {
