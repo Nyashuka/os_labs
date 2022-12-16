@@ -23,9 +23,14 @@ fn panic(_info: &PanicInfo) -> ! {
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
 
-    let mut driver = VGADriver::new(Color::Pink, Color::Black, Alignment::Center);
+    let mut driver = VGADriver::new(Color::Pink, Color::White, Alignment::Center);
 
-    game_of_life(&mut driver);
+    for i in 0..100
+    {
+        write!(driver,"dasdsad {}\n", i);
+    }
+
+    //game_of_life(&mut driver);
     
     loop {}
 }

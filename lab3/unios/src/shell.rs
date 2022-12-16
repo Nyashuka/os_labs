@@ -1,8 +1,7 @@
 use crate::vga_buf::SCREEN;
 use crate::{print, println};
-use core::ptr::null_mut;
 use lazy_static::lazy_static;
-use pc_keyboard::{DecodedKey, KeyCode};
+use pc_keyboard::DecodedKey;
 
 const FORMATING_STRING: &str = " $ ";
 const FORMATING_STRING_LENGTH: u32 = 3;
@@ -25,8 +24,7 @@ pub fn handle_keyboard_interrupt(key: DecodedKey) {
     }
 }
 
-pub fn init_shell()
-{
+pub fn init_shell() {
     good_formatting();
 }
 
@@ -37,13 +35,13 @@ struct Directory {
     index: usize,
     name: [u8; MAX_SIZE_DIRECTORY_NAME],
     parent_index: usize,
-    child_count: u8,
+    child_count: usize,
     child_indexes: [usize; MAX_COUNT_CHILDREN_DIRECTORIES],
 }
 
 struct DirectoryList {
     directories: [Directory; 100],
-    next_directory: u8,
+    directory_count: usize,
 }
 
 pub fn mu_split(arr: [u8; 80], buf_len: usize) -> ([u8; COMMAND_SIZE], [u8; ARGV_SIZE]) {
@@ -57,7 +55,7 @@ pub fn mu_split(arr: [u8; 80], buf_len: usize) -> ([u8; COMMAND_SIZE], [u8; ARGV
         i += 1;
     }
 
-    if i == buf_len - 1 {
+    if i == buf_len {
         return (cmd, argument);
     }
 
@@ -97,49 +95,12 @@ fn print_error_command_not_found(cmd: [u8; COMMAND_SIZE]) {
         core::str::from_utf8(&cmd).unwrap().trim_matches('\0')
     );
 }
-
-// pub fn concat_u8_arr(first_arr: [u8;10], second_arr: [u8;10]) -> &'static str
-// {
-//     let mut n = 0;
-//     for i in first_arr
-//     {
-//         if i == b'\0' {break};
-//         n += 1;
-//     }
-//     for i in second_arr
-//     {
-//         if i == b'\0' {break};
-//         n += 1;
-//     }
-//     const count:usize = n;
-
-//     let mut new_arr = [b' '; n];
-//     n = 0;
-//     for i in first_arr
-//     {
-//         if i == b'\0' {break};
-//         new_arr[n] = i;
-//         n += 1;
-//     }
-//     for i in second_arr
-//     {
-       
-//         if i == b'\0' {break};
-//         new_arr[n] = i;
-//         n += 1;
-//     }
-
-//     let concated_str = core::str::from_utf8(&new_arr).unwrap();
-    
-//     return concated_str;
-// }
-
 // END REGION of MY METHODS
 
 struct Shell {
     buf: [u8; 80],
     buf_len: usize,
-    directories: DirectoryList,
+    directory_list: DirectoryList,
     current_directory: Directory,
 }
 
@@ -148,12 +109,17 @@ impl Shell {
         if compare_str_with_arr("echo", argv.0) {
             self.echo_command(argv.1);
         } else if compare_str_with_arr("curdir", argv.0) {
-            self.current_directory_command();
-        } 
-        else if compare_str_with_arr("clear", argv.0) {
+            self.current_directory_command(self.current_directory);
+        } else if compare_str_with_arr("mkdir", argv.0) {
+            self.create_folder_command(argv.1);
+        } else if compare_str_with_arr("clear", argv.0) {
             self.clear_command();
-        } 
-        else {
+        } else if compare_str_with_arr("cd", argv.0) {
+            self.change_directory_command(argv.1);
+        } else if compare_str_with_arr("dirtree", argv.0) {
+            self.directory_tree_command(self.directory_list.directories[self.current_directory.index], 0);
+        } else if compare_str_with_arr("nocmd", argv.0) {
+        } else {
             print_error_command_not_found(argv.0);
         }
     }
@@ -165,52 +131,150 @@ impl Shell {
         }
     }
 
-    fn clear_command(&mut self)
-    {
+    fn change_directory_command(&mut self, argv: [u8; ARGV_SIZE]) {
+        if argv[0] == b'.' {
+            self.current_directory =
+                self.directory_list.directories[self.current_directory.parent_index];
+            return;
+        }
+
+        let cur_dir = self.directory_list.directories[self.current_directory.index];
+
+        for dir_index in cur_dir.child_indexes {
+            let mut is_same = true;
+            for i in 0..ARGV_SIZE {
+                if argv[i] == b'\0' {
+                    break;
+                }
+
+                if i == MAX_SIZE_DIRECTORY_NAME {
+                    print!("[Error] The maximum size of the directory name is 10 characters");
+                    return;
+                }
+
+                if self.directory_list.directories[dir_index].name[i] != argv[i] {
+                    is_same = false;
+                    break;
+                }
+            }
+
+            if is_same {
+                self.current_directory = self.directory_list.directories[dir_index];
+                return;
+            }
+        }
+
+        print!(
+            "\nFolder \"{}\" is not exist!",
+            core::str::from_utf8(&argv.clone())
+                .unwrap()
+                .trim_matches('\0')
+        )
+    }
+
+    fn clear_command(&mut self) {
         SCREEN.lock().clear();
     }
 
-    fn print_directory_name(&mut self, dir_name:[u8; MAX_SIZE_DIRECTORY_NAME])
-    {
+    fn directory_tree_command(&mut self, current_directory: Directory, tab_count: usize) {
+        println!();
+        for i in 0..current_directory.child_count {
+            let child_directory =
+                self.directory_list.directories[current_directory.child_indexes[i]];
+
+            for tc in 0..tab_count {
+                for ts in 0..4 {
+                    print!(" ");
+                }
+            }
+            print!(
+                "/{}",
+                core::str::from_utf8(&child_directory.name)
+                    .unwrap()
+                    .trim_matches('\0')
+            );
+
+            self.directory_tree_command(child_directory, tab_count + 1);
+        }
+    }
+
+    fn print_directory_name(&mut self, dir_name: [u8; MAX_SIZE_DIRECTORY_NAME]) {
         print!(
             "{}",
             core::str::from_utf8(&dir_name).unwrap().trim_matches('\0')
         );
         SCREEN.lock().push_row_to_right(0);
         SCREEN.lock().move_print_to(0);
-        
+
         print!("/");
     }
 
-    fn current_directory_command(&mut self) {
-
-
-        let mut dir = self.current_directory.clone();
-        println!();
-        while dir.parent_index != 0 {
-            for symbol in dir.name {
-                if (symbol == b'\0') {
-                    break;
-                }
-
-                print!("{}", symbol as char);
-                SCREEN.lock().push_row_to_right(0);
-                SCREEN.lock().move_print_to(0);
+    fn create_folder_command(&mut self, argv: [u8; ARGV_SIZE]) {
+        let mut name_size = 0;
+        for i in 0..ARGV_SIZE {
+            if argv[i] == b'\0' {
+                break;
             }
-            print!("/");
-            SCREEN.lock().push_row_to_right(0);
-            SCREEN.lock().move_print_to(0);
+            name_size += 1;
         }
-        // root
-        self.print_directory_name(self.directories.directories[0].clone().name);
-        
+
+        if name_size > MAX_SIZE_DIRECTORY_NAME {
+            print!("\n[Error] The maximum size of the directory name is 10 characters");
+            return;
+        }
+
+        let mut directory: Directory = Directory {
+            index: self.directory_list.directory_count,
+            name: [b'\0'; MAX_SIZE_DIRECTORY_NAME],
+            parent_index: self.current_directory.index,
+            child_count: 0,
+            child_indexes: [0; MAX_COUNT_CHILDREN_DIRECTORIES],
+        };
+
+        for i in 0..MAX_SIZE_DIRECTORY_NAME {
+            directory.name[i] = argv[i];
+        }
+        let current_directory = self.directory_list.directories[self.current_directory.index];
+
+        self.directory_list.directories[self.directory_list.directory_count] = directory;
+        self.directory_list.directories[self.current_directory.index].child_indexes[current_directory.child_count] = self.directory_list.directory_count;
+
+        self.directory_list.directory_count += 1;
+        self.directory_list.directories[self.current_directory.index].child_count += 1;
+
+        print!(
+            "\n[Ok] Directory \"{}\" created succsessfully!",
+            core::str::from_utf8(&directory.name.clone())
+                .unwrap()
+                .trim_matches('\0')
+        );
+    }
+
+    fn current_directory_command(&mut self, current_directory: Directory) -> usize {
+        let parent_directory = self.directory_list.directories[current_directory.parent_index];
+        let mut nesting = 0;
+
+        if current_directory.index > 0 {
+            nesting = self.current_directory_command(parent_directory);
+        } else {
+            println!();
+        }
+
+        print!(
+            "/{}",
+            core::str::from_utf8(&current_directory.name.clone())
+                .unwrap()
+                .trim_matches('\0')
+        );
+
+        return nesting;
     }
 
     pub fn new() -> Shell {
         let mut shell: Shell = Shell {
             buf: [0; 80],
             buf_len: 0,
-            directories: DirectoryList {
+            directory_list: DirectoryList {
                 directories: ([Directory {
                     index: 0,
                     name: [b' '; MAX_SIZE_DIRECTORY_NAME],
@@ -218,7 +282,7 @@ impl Shell {
                     child_count: 0,
                     child_indexes: [0; MAX_COUNT_CHILDREN_DIRECTORIES],
                 }; 100]),
-                next_directory: (1),
+                directory_count: 1,
             },
             current_directory: Directory {
                 index: 0,
@@ -231,7 +295,7 @@ impl Shell {
             },
         };
 
-        shell.directories.directories[0] = shell.current_directory.clone();
+        shell.directory_list.directories[0] = shell.current_directory;
 
         return shell;
     }
@@ -250,6 +314,10 @@ impl Shell {
             // key code of backspace
             {
                 SCREEN.lock().delete_last_symbol(FORMATING_STRING_LENGTH);
+                if self.buf_len > 0 {
+                    self.buf_len -= 1;
+                }
+                self.buf[self.buf_len] = 0;
             }
             32 =>
             // key code of space button
