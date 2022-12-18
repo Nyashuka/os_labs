@@ -36,6 +36,5 @@ pub extern "C" fn _start() -> ! {
     interrupts::set_timer_interrupt_handler(my_timer_handler);
     interrupts::init();
 
-
     loop {}
 }

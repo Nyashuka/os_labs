@@ -48,7 +48,7 @@ pub struct AsciiChar {
 
 pub struct Screen {
     color: u8,
-    buffer: &'static mut [u8; BUF_SIZE],
+    pub buffer: &'static mut [u8; BUF_SIZE],
     line: u32,
     col: u32
 }
@@ -145,6 +145,20 @@ impl Screen {
         }
     }
 
+    pub fn get_buffer(&mut self) -> [u8; (BUF_HEIGHT * BUF_WIDTH) as usize]
+    {
+        let mut buf = [b' '; (BUF_HEIGHT * BUF_WIDTH) as usize];
+
+        for i in 0..BUF_HEIGHT {
+            for j in 0..BUF_WIDTH
+            {
+                buf[(i * BUF_WIDTH + j) as usize] = self.read_char(i * BUF_WIDTH + j).char_byte;
+            }
+        }
+
+        return buf;
+    }
+
     fn scroll_up(&mut self) {
         for i in 0..self.line {
             for j in 0..BUF_WIDTH {
@@ -166,7 +180,7 @@ impl Screen {
         self.buffer[offset as usize * 2 + 1] = char.color_byte;
     }
 
-    fn read_char(&self, offset: u32) -> AsciiChar {
+    pub fn read_char(&self, offset: u32) -> AsciiChar {
         unsafe {
             return AsciiChar {
                 char_byte: self.buffer[offset as usize * 2],
