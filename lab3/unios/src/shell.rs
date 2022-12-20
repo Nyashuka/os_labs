@@ -539,13 +539,10 @@ impl Shell {
             directory.name[i] = argv[i];
         }
 
-        
-
-        let current_directory = self.directory_list.directories[self.current_directory];
 
         self.directory_list.directories[dir_index] = directory;
         self.directory_list.directories[self.current_directory].child_indexes
-            [current_directory.child_count] = dir_index;
+            [free_index] = dir_index;
 
         self.directory_list.directories[self.current_directory].child_count += 1;
 
