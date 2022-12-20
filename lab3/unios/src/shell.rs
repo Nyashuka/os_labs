@@ -51,7 +51,6 @@ struct Directory {
 
 struct DirectoryList {
     directories: [Directory; MAX_COUNT_DIRECTORIES],
-    directory_count: usize
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -62,7 +61,6 @@ struct File {
     folder_index: usize,
     content: [u8; BUF_SIZE],
 }
-
 
 struct FileList {
     files: [File; MAX_COUNT_FILES],
@@ -127,50 +125,40 @@ struct Shell {
     directory_list: DirectoryList,
     files_list: FileList,
     current_directory: Directory,
-    is_iditing_file: bool,
-    current_editing_file: usize
+    is_editing_file: bool,
+    current_editing_file: usize,
 }
 
 impl Shell {
     fn execute_command(&mut self, argv: ([u8; COMMAND_SIZE], [u8; ARGV_SIZE])) {
         if compare_str_with_arr("echo", argv.0) {
             self.echo_command(argv.1);
-        } 
-        else if compare_str_with_arr("curdir", argv.0) {
+        } else if compare_str_with_arr("curdir", argv.0) {
             self.current_directory_command(self.current_directory);
-        } 
-        else if compare_str_with_arr("mkdir", argv.0) {
+        } else if compare_str_with_arr("mkdir", argv.0) {
             self.create_folder_command(argv.1);
-        } 
-        else if compare_str_with_arr("clear", argv.0) {
+        } else if compare_str_with_arr("clear", argv.0) {
             self.clear_command();
-        } 
-        else if compare_str_with_arr("cd", argv.0) {
+        } else if compare_str_with_arr("cd", argv.0) {
             self.change_directory_command(argv.1);
-        } 
-        else if compare_str_with_arr("dirtree", argv.0) {
-            self.directory_tree_command(self.directory_list.directories[self.current_directory.index], 0);
-        } 
-        else if compare_str_with_arr("deldir", argv.0) {
+        } else if compare_str_with_arr("dirtree", argv.0) {
+            self.directory_tree_command(
+                self.directory_list.directories[self.current_directory.index],
+                0,
+            );
+        } else if compare_str_with_arr("deldir", argv.0) {
             self.delete_directory_command(argv.1);
-        } 
-        else if compare_str_with_arr("ls", argv.0) {
-            //self.delete_directory_command();
-        } 
-        else if compare_str_with_arr("mkfile", argv.0) {
+        } else if compare_str_with_arr("ls", argv.0) {
+            self.list_files_command();
+        } else if compare_str_with_arr("mkfile", argv.0) {
             self.create_file_command(argv.1);
-        } 
-        else if compare_str_with_arr("delfile", argv.0) {
-            
-        } 
-        else if compare_str_with_arr("readfile", argv.0) {
+        } else if compare_str_with_arr("delfile", argv.0) {
+            self.delete_file_command(argv.1);
+        } else if compare_str_with_arr("readfile", argv.0) {
             self.print_file_content_command(argv.1);
-            
-        } 
-        else if compare_str_with_arr("ednfile", argv.0) {
-            //self.delete_directory_command();
-        } 
-        else {
+        } else if compare_str_with_arr("editfile", argv.0) {
+            self.edit_file_command(argv.1);
+        } else {
             print_error_command_not_found(argv.0);
         }
     }
@@ -182,19 +170,138 @@ impl Shell {
         }
     }
 
-    fn print_file_content_command(&mut self, argv: [u8; ARGV_SIZE]) {
-
-        
-
-        self.clear_command();
-        for i in 0..(BUF_WIDTH * self.files_list.files[0].count_lines as u32)
-        {
-            print!("{}", self.files_list.files[0].content[i as usize] as char);
+    fn list_files_command(&mut self) {
+        println!();
+        for i in 0..MAX_COUNT_FILES_IN_FOLDER {
+            if self.directory_list.directories[self.current_directory.index].files_indexes[i]
+                != DELETED_INDEX_FILE
+            {
+                print!(
+                    "{}    ",
+                    core::str::from_utf8(
+                        &self.files_list.files[self.directory_list.directories
+                            [self.current_directory.index]
+                            .files_indexes[i]]
+                            .name
+                            .clone()
+                    )
+                    .unwrap()
+                    .trim_matches('\0')
+                );
+            }
         }
     }
 
-    fn create_file_command(&mut self, argv: [u8; ARGV_SIZE])
-    {
+    fn get_file_index_by_name(&mut self, argv: [u8; ARGV_SIZE]) -> usize {
+        let mut current_file_index = DELETED_INDEX_FILE;
+        let mut is_same = true;
+
+        for i in 0..MAX_COUNT_FILES_IN_FOLDER {
+            current_file_index =
+                self.directory_list.directories[self.current_directory.index].files_indexes[i];
+
+            if current_file_index == DELETED_INDEX_FILE {
+                continue;
+            }
+
+            is_same = true;
+            for j in 0..MAX_SIZE_DIRECTORY_NAME {
+                if argv[j] == b'\0' {
+                    break;
+                }
+
+                if argv[j] != self.files_list.files[current_file_index].name[j] {
+                    is_same = false;
+                    break;
+                }
+            }
+
+            if is_same {
+                return current_file_index;
+            }
+        }
+
+        return DELETED_INDEX_FILE;
+    }
+
+    fn print_file_content_command(&mut self, argv: [u8; ARGV_SIZE]) {
+        self.clear_command();
+
+        let current_file_index = self.get_file_index_by_name(argv);
+
+        if current_file_index == DELETED_INDEX_FILE {
+            print!(
+                "\n[Error] File \"{}\" does not exist!",
+                core::str::from_utf8(&argv.clone())
+                    .unwrap()
+                    .trim_matches('\0')
+            );
+            return;
+        }
+
+        for j in 0..(BUF_WIDTH * (self.files_list.files[current_file_index].count_lines) as u32)
+        {
+            print!(
+                "{}",
+                self.files_list.files[current_file_index].content[j as usize] as char
+            );
+        }
+    }
+
+    fn edit_file_command(&mut self, argv: [u8; ARGV_SIZE]) {
+        let current_file_index = self.get_file_index_by_name(argv);
+
+        if current_file_index == DELETED_INDEX_FILE {
+            print!(
+                "\n[Error] File \"{}\" does not exist!",
+                core::str::from_utf8(&argv.clone())
+                    .unwrap()
+                    .trim_matches('\0')
+            );
+            return;
+        }
+
+        self.is_editing_file = true;
+        self.current_editing_file = current_file_index;
+        self.files_list.files[self.current_editing_file].count_lines = 0;
+
+        self.clear_command();
+    }
+
+    fn delete_file_command(&mut self, argv: [u8; ARGV_SIZE]) {
+        self.clear_command();
+
+        let current_file_index = self.get_file_index_by_name(argv);
+
+        if current_file_index == DELETED_INDEX_FILE {
+            print!(
+                "\n[Error] File \"{}\" does not exist!",
+                core::str::from_utf8(&argv.clone())
+                    .unwrap()
+                    .trim_matches('\0')
+            );
+            return;
+        }
+
+        self.files_list.files[current_file_index] = File {
+            index: DELETED_INDEX_FILE,
+            name: [b'\0'; MAX_SIZE_DIRECTORY_NAME],
+            count_lines: 0,
+            folder_index: DELETED_INDEX_DIRECTORY,
+            content: [b' '; BUF_SIZE],
+        };
+
+        for i in 0..MAX_COUNT_FILES_IN_FOLDER {
+            if self.directory_list.directories[self.current_directory.index].child_indexes[i]
+                == current_file_index
+            {
+                self.directory_list.directories[self.current_directory.index].child_indexes[i] =
+                    DELETED_INDEX_FILE;
+            }
+        }
+    }
+
+    fn create_file_command(&mut self, argv: [u8; ARGV_SIZE]) {
         let mut name_size = 0;
         let mut name = [b'\0'; MAX_SIZE_DIRECTORY_NAME];
 
@@ -211,13 +318,24 @@ impl Shell {
             return;
         }
 
-        let mut file_index = 0;
+        let mut file_index = DELETED_INDEX_FILE;
+
+        for i in 0..MAX_COUNT_FILES {
+            if self.files_list.files[i].index == DELETED_INDEX_FILE {
+                file_index = i;
+                break;
+            }
+        }
+
+        if file_index == DELETED_INDEX_FILE {
+            print!("\n[Error] There is not a free space!");
+            return;
+        }
 
         for i in 0..MAX_COUNT_FILES_IN_FOLDER {
-            if self.files_list.files[i].index == DELETED_INDEX_FILE
-            {
+            if self.files_list.files[i].index == DELETED_INDEX_FILE {
                 file_index = i;
-                break;    
+                break;
             }
         }
 
@@ -229,55 +347,69 @@ impl Shell {
             content: [b' '; BUF_SIZE],
         };
 
-        self.is_iditing_file = true;
+        self.is_editing_file = true;
+        self.current_editing_file = file_index;
 
         SCREEN.lock().clear();
 
         self.files_list.files[file_index] = file;
-        self.directory_list.directories[self.current_directory.index].files_indexes[0] = file_index;
+
+        let mut index_for_folder = DELETED_INDEX_FILE;
+        for i in 0..MAX_COUNT_FILES_IN_FOLDER {
+            if self.directory_list.directories[self.current_directory.index].files_indexes[i]
+                == DELETED_INDEX_FILE
+            {
+                index_for_folder = i;
+            }
+        }
+
+        self.directory_list.directories[self.current_directory.index].files_indexes
+            [index_for_folder] = file_index;
     }
 
-    fn delete_directory_command(&mut self, dir_name: [u8; ARGV_SIZE])
-    {
+    fn delete_directory_command(&mut self, dir_name: [u8; ARGV_SIZE]) {
         let cur_dir = self.directory_list.directories[self.current_directory.index];
         let mut is_same = true;
-        for i in 0..cur_dir.child_count
-        {
+        for i in 0..cur_dir.child_count {
             let dir_to_check = self.directory_list.directories[cur_dir.child_indexes[i]];
-            
+
             is_same = true;
 
-            for j in 0..MAX_SIZE_DIRECTORY_NAME
-            {
-                if dir_to_check.name[j] != dir_name[j]
-                {
+            for j in 0..MAX_SIZE_DIRECTORY_NAME {
+                if dir_to_check.name[j] != dir_name[j] {
                     is_same = false;
                 }
             }
 
-            if is_same
-            {        
-                if self.directory_list.directories[dir_to_check.index].child_count > 0
-                {
-                    print!("[Error] Count parents must be 0");
-                    return;
-                }
-                
-                self.directory_list.directories[self.current_directory.index].child_count -= 1;
-
-                self.directory_list.directories[dir_to_check.index] = Directory {
-                    index: DELETED_INDEX_DIRECTORY,
-                    name: [b' '; MAX_SIZE_DIRECTORY_NAME],
-                    parent_index: DELETED_INDEX_DIRECTORY,
-                    child_count: DELETED_INDEX_DIRECTORY,
-                    child_indexes: [DELETED_INDEX_DIRECTORY; MAX_COUNT_CHILDREN_DIRECTORIES],
-                    files_indexes: [DELETED_INDEX_FILE; MAX_COUNT_FILES_IN_FOLDER],
-                };
-
-                self.directory_list.directories[cur_dir.index].child_indexes[i] = DELETED_INDEX_DIRECTORY;
-
+            if !is_same {
                 return;
             }
+
+            if self.directory_list.directories[dir_to_check.index].child_count > 0 {
+                print!("[Error] Count parents must be 0");
+                return;
+            }
+
+            self.directory_list.directories[self.current_directory.index].child_count -= 1;
+
+            self.directory_list.directories[dir_to_check.index] = Directory {
+                index: DELETED_INDEX_DIRECTORY,
+                name: [b' '; MAX_SIZE_DIRECTORY_NAME],
+                parent_index: DELETED_INDEX_DIRECTORY,
+                child_count: DELETED_INDEX_DIRECTORY,
+                child_indexes: [DELETED_INDEX_DIRECTORY; MAX_COUNT_CHILDREN_DIRECTORIES],
+                files_indexes: [DELETED_INDEX_FILE; MAX_COUNT_FILES_IN_FOLDER],
+            };
+
+            self.directory_list.directories[cur_dir.index].child_indexes[i] =
+                DELETED_INDEX_DIRECTORY;
+
+            print!(
+                "\n[Ok] Directory \"{}\" deleted succsessfully!",
+                core::str::from_utf8(&dir_name.clone())
+                    .unwrap()
+                    .trim_matches('\0')
+            );
         }
     }
 
@@ -348,17 +480,6 @@ impl Shell {
         }
     }
 
-    fn print_directory_name(&mut self, dir_name: [u8; MAX_SIZE_DIRECTORY_NAME]) {
-        print!(
-            "{}",
-            core::str::from_utf8(&dir_name).unwrap().trim_matches('\0')
-        );
-        SCREEN.lock().push_row_to_right(0);
-        SCREEN.lock().move_print_to(0);
-
-        print!("/");
-    }
-
     fn create_folder_command(&mut self, argv: [u8; ARGV_SIZE]) {
         let mut name_size = 0;
         for i in 0..ARGV_SIZE {
@@ -373,8 +494,22 @@ impl Shell {
             return;
         }
 
+        let mut dir_index = DELETED_INDEX_DIRECTORY;
+
+        for i in 0..MAX_COUNT_DIRECTORIES {
+            if self.directory_list.directories[i].index == DELETED_INDEX_DIRECTORY {
+                dir_index = i;
+                break;
+            }
+        }
+
+        if dir_index == DELETED_INDEX_DIRECTORY {
+            print!("\n[Error] There is not a free space!");
+            return;
+        }
+
         let mut directory: Directory = Directory {
-            index: self.directory_list.directory_count,
+            index: dir_index,
             name: [b'\0'; MAX_SIZE_DIRECTORY_NAME],
             parent_index: self.current_directory.index,
             child_count: 0,
@@ -387,10 +522,10 @@ impl Shell {
         }
         let current_directory = self.directory_list.directories[self.current_directory.index];
 
-        self.directory_list.directories[self.directory_list.directory_count] = directory;
-        self.directory_list.directories[self.current_directory.index].child_indexes[current_directory.child_count] = self.directory_list.directory_count;
+        self.directory_list.directories[dir_index] = directory;
+        self.directory_list.directories[self.current_directory.index].child_indexes
+            [current_directory.child_count] = dir_index;
 
-        self.directory_list.directory_count += 1;
         self.directory_list.directories[self.current_directory.index].child_count += 1;
 
         print!(
@@ -427,14 +562,13 @@ impl Shell {
             buf_len: 0,
             directory_list: DirectoryList {
                 directories: ([Directory {
-                    index: 0,
+                    index: DELETED_INDEX_DIRECTORY,
                     name: [b' '; MAX_SIZE_DIRECTORY_NAME],
                     parent_index: 0,
                     child_count: 0,
                     child_indexes: [DELETED_INDEX_DIRECTORY; MAX_COUNT_CHILDREN_DIRECTORIES],
                     files_indexes: [DELETED_INDEX_FILE; MAX_COUNT_FILES_IN_FOLDER],
-                }; 100]),
-                directory_count: 1,
+                }; MAX_COUNT_DIRECTORIES]),
             },
             current_directory: Directory {
                 index: 0,
@@ -446,17 +580,17 @@ impl Shell {
                 child_indexes: [DELETED_INDEX_DIRECTORY; MAX_COUNT_CHILDREN_DIRECTORIES],
                 files_indexes: [DELETED_INDEX_FILE; MAX_COUNT_FILES_IN_FOLDER],
             },
-            files_list: FileList { files:
-                [File{
+            files_list: FileList {
+                files: [File {
                     index: DELETED_INDEX_FILE,
                     name: [b'\0'; MAX_SIZE_DIRECTORY_NAME],
                     count_lines: 0,
                     folder_index: DELETED_INDEX_DIRECTORY,
-                    content: [b' '; BUF_SIZE]
-                }; MAX_COUNT_FILES]
-             },
-             is_iditing_file: false,
-             current_editing_file: DELETED_INDEX_FILE           
+                    content: [b' '; BUF_SIZE],
+                }; MAX_COUNT_FILES],
+            },
+            is_editing_file: false,
+            current_editing_file: DELETED_INDEX_FILE,
         };
 
         shell.directory_list.directories[0] = shell.current_directory;
@@ -467,8 +601,7 @@ impl Shell {
     pub fn on_key_pressed(&mut self, key: u8) {
         match key {
             b'\n' => {
-                if self.is_iditing_file
-                {
+                if self.is_editing_file {
                     self.files_list.files[self.current_editing_file].count_lines += 1;
                     println!();
                     return;
@@ -479,20 +612,38 @@ impl Shell {
                 self.execute_command(argv);
                 self.buf_len = 0;
 
-                if self.is_iditing_file
-                {
+                if self.is_editing_file {
                     return;
                 }
                 println!();
                 good_formatting()
             }
+            37 =>
+            // key code arrow left
+            {
+
+            }
+            38 =>
+            // key code arrow up
+            {
+
+            }
+            39 =>
+            // key code arrow right
+            {
+                
+            }
+            40 =>
+            // key code arrow down
+            {
+                
+            }
             8 =>
             // key code of backspace
-            {   
-                if self.is_iditing_file
-                {
+            {
+                if self.is_editing_file {
                     SCREEN.lock().delete_last_symbol(0);
-                    return;   
+                    return;
                 }
 
                 SCREEN.lock().delete_last_symbol(FORMATING_STRING_LENGTH);
@@ -500,6 +651,7 @@ impl Shell {
                 if self.buf_len > 0 {
                     self.buf_len -= 1;
                 }
+
                 self.buf[self.buf_len] = 0;
             }
             32 =>
@@ -507,31 +659,39 @@ impl Shell {
             {
                 print!("{}", key as char);
 
-                if self.is_iditing_file
-                {
+                if self.is_editing_file {
                     return;
                 }
 
                 self.buf[self.buf_len] = b' ';
                 self.buf_len += 1;
-                
             }
             9 =>
             // tab key
             {
-                if self.is_iditing_file
-                {
-                    self.is_iditing_file = false;
+                if self.is_editing_file {
+                    self.is_editing_file = false;
+                    self.files_list.files[self.current_editing_file].count_lines += 1;
 
-                    self.files_list.files[self.current_editing_file].content = SCREEN.lock().get_buffer();
-                    
+                    self.files_list.files[self.current_editing_file].content =
+                        SCREEN.lock().get_buffer();
+
                     self.clear_command();
+                    print!(
+                        "\n[Ok] File \"{}\" saved succsessfully!\n",
+                        core::str::from_utf8(
+                            &self.files_list.files[self.current_editing_file]
+                                .name
+                                .clone()
+                        )
+                        .unwrap()
+                        .trim_matches('\0')
+                    );
                     good_formatting();
                 }
             }
             _ => {
-                if self.is_iditing_file
-                {
+                if self.is_editing_file {
                     print!("{}", key as char);
                     return;
                 }
