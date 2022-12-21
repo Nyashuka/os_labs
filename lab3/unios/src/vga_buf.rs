@@ -49,8 +49,8 @@ pub struct AsciiChar {
 pub struct Screen {
     color: u8,
     pub buffer: &'static mut [u8; BUF_SIZE],
-    line: u32,
-    col: u32
+    pub line: u32,
+    pub col: u32
 }
 
 impl core::fmt::Write for Screen {
@@ -81,28 +81,13 @@ impl Screen {
             data_port.write((position >> 8) & 0x00FF);
             cmd_port.write(15 as u16);
             data_port.write(position & 0x00FF);
+
+        
         }
     }
     
     pub fn move_cursor(&mut self){
         self.set_cursor_position((self.line * BUF_WIDTH + self.col) as u16);
-    }
-
-    pub fn push_row_to_right(&mut self, row_start: u32)
-    {
-        let mut column = BUF_WIDTH-2;
-        while column != row_start 
-        {
-            let read_char = self.read_char(self.line * BUF_WIDTH + column);
-
-            self.write_char(self.line * BUF_WIDTH + column+ 1, read_char);
-            
-            column -= 1;
-        }
-
-        let read_char = self.read_char(self.line * BUF_WIDTH + column);
-
-        self.write_char(self.line * BUF_WIDTH + column+ 1, read_char);
     }
 
     pub fn move_print_to(&mut self, x: u32)
@@ -159,7 +144,7 @@ impl Screen {
         return buf;
     }
 
-    fn scroll_up(&mut self) {
+    pub fn scroll_up(&mut self) {
         for i in 0..self.line {
             for j in 0..BUF_WIDTH {
                 let char_to_copy = self.read_char(BUF_WIDTH * (i + 1) + j);
@@ -167,8 +152,9 @@ impl Screen {
             }
         }
         for i in 0..BUF_WIDTH {
-            self.write_char(self.line * BUF_WIDTH + i, AsciiChar { char_byte: b' ', color_byte: 0x00 });
+            self.write_char(self.line * BUF_WIDTH + i, AsciiChar { char_byte: b' ', color_byte: self.color });
         }
+        
     }
 
     fn write_char_byte(&mut self, offset: u32, char_byte: u8) {

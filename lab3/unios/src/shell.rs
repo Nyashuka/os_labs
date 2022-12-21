@@ -366,24 +366,17 @@ impl Shell {
 
     fn delete_directory_command(&mut self, dir_name: [u8; ARGV_SIZE]) {
         let cur_dir = self.directory_list.directories[self.current_directory];
-        let mut is_same = true;
         for i in 0..cur_dir.child_count {
             let dir_to_check = self.directory_list.directories[cur_dir.child_indexes[i]];
 
-            is_same = true;
-
             for j in 0..MAX_SIZE_DIRECTORY_NAME {
                 if dir_to_check.name[j] != dir_name[j] {
-                    is_same = false;
+                    continue;
                 }
             }
 
-            if !is_same {
-                return;
-            }
-
             if self.directory_list.directories[dir_to_check.index].child_count > 0 {
-                print!("[Error] Count parents must be 0");
+                print!("[Error] Count of childrens must be 0");
                 return;
             }
 
@@ -531,7 +524,7 @@ impl Shell {
             name: [b'\0'; MAX_SIZE_DIRECTORY_NAME],
             parent_index: self.current_directory,
             child_count: 0,
-            child_indexes: [0; MAX_COUNT_CHILDREN_DIRECTORIES],
+            child_indexes: [DELETED_INDEX_DIRECTORY; MAX_COUNT_CHILDREN_DIRECTORIES],
             files_indexes: [DELETED_INDEX_FILE; MAX_COUNT_FILES_IN_FOLDER],
         };
 
@@ -636,7 +629,7 @@ impl Shell {
                     return;
                 }
                 println!();
-                good_formatting()
+                good_formatting();
             }
             37 =>
             // key code arrow left
