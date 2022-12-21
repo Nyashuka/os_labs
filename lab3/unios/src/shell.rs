@@ -365,14 +365,37 @@ impl Shell {
     }
 
     fn delete_directory_command(&mut self, dir_name: [u8; ARGV_SIZE]) {
+
+        let mut is_correct = false;
+        for i in 0..MAX_SIZE_DIRECTORY_NAME
+        {
+            if dir_name[i] != b'\0'
+            {
+                is_correct = true;
+                break;
+            }
+        }
+
+        if !is_correct
+        {
+            print!("\n[Error] Specify a folder name!");
+            return;
+        }
+
         let cur_dir = self.directory_list.directories[self.current_directory];
         for i in 0..cur_dir.child_count {
             let dir_to_check = self.directory_list.directories[cur_dir.child_indexes[i]];
 
+            let mut is_same = true;
             for j in 0..MAX_SIZE_DIRECTORY_NAME {
                 if dir_to_check.name[j] != dir_name[j] {
-                    continue;
+                    is_same = false;
+                    break;
                 }
+            }
+
+            if !is_same {
+                continue;
             }
 
             if self.directory_list.directories[dir_to_check.index].child_count > 0 {
@@ -399,7 +422,10 @@ impl Shell {
                 core::str::from_utf8(&dir_name.clone())
                     .unwrap()
                     .trim_matches('\0')
+                    
             );
+
+            return;
         }
     }
 
