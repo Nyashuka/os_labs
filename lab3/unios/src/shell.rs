@@ -574,6 +574,14 @@ impl Shell {
             return;
         }
 
+        if self.get_folder_index_by_name(argv) != DELETED_INDEX_DIRECTORY
+        {
+            print!("\n[Error] Directory \"{}\" already exist", core::str::from_utf8(&argv.clone())
+            .unwrap()
+            .trim_matches('\0'));
+            return;
+        }
+
         let mut dir_index = DELETED_INDEX_DIRECTORY;
 
         for i in 0..MAX_COUNT_DIRECTORIES {
