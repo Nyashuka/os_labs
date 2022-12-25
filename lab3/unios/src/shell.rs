@@ -139,10 +139,7 @@ impl Shell {
         } else if compare_str_with_arr("cd", argv.0) {
             self.change_directory_command(argv.1);
         } else if compare_str_with_arr("dirtree", argv.0) {
-            self.directory_tree_command(
-                self.directory_list.directories[self.current_directory],
-                0,
-            );
+            self.directory_tree_command(self.directory_list.directories[self.current_directory], 0);
         } else if compare_str_with_arr("deldir", argv.0) {
             self.delete_directory_command(argv.1);
         } else if compare_str_with_arr("ls", argv.0) {
@@ -221,6 +218,37 @@ impl Shell {
         return DELETED_INDEX_FILE;
     }
 
+    fn get_folder_index_by_name(&mut self, argv: [u8; ARGV_SIZE]) -> usize {
+
+        for i in 0..MAX_COUNT_CHILDREN_DIRECTORIES {
+            let mut is_same = true;
+            let dir_index = self.directory_list.directories[self.current_directory].child_indexes[i];
+
+            if dir_index == DELETED_INDEX_DIRECTORY
+            {
+                continue;
+            }
+
+            for i in 0..ARGV_SIZE {
+                if argv[i] == b'\0' {
+                    break;
+                }
+
+                if self.directory_list.directories[dir_index].name[i] != argv[i] {
+                    is_same = false;
+                    break;
+                }
+            }
+
+            if is_same {
+                // return index of child_indeexes array of current folder
+                return i;
+            } 
+        }
+
+        return DELETED_INDEX_DIRECTORY;
+    }
+
     fn print_file_content_command(&mut self, argv: [u8; ARGV_SIZE]) {
         self.clear_command();
 
@@ -236,8 +264,7 @@ impl Shell {
             return;
         }
 
-        for j in 0..(BUF_WIDTH * (self.files_list.files[current_file_index].count_lines) as u32)
-        {
+        for j in 0..(BUF_WIDTH * (self.files_list.files[current_file_index].count_lines) as u32) {
             print!(
                 "{}",
                 self.files_list.files[current_file_index].content[j as usize] as char
@@ -360,73 +387,79 @@ impl Shell {
             }
         }
 
-        self.directory_list.directories[self.current_directory].files_indexes
-            [index_for_folder] = file_index;
+        self.directory_list.directories[self.current_directory].files_indexes[index_for_folder] =
+            file_index;
     }
 
-    fn delete_directory_command(&mut self, dir_name: [u8; ARGV_SIZE]) {
-
-        let mut is_correct = false;
-        for i in 0..MAX_SIZE_DIRECTORY_NAME
-        {
-            if dir_name[i] != b'\0'
-            {
-                is_correct = true;
-                break;
+    fn check_correct_dir_name(&mut self, dir_name: [u8; ARGV_SIZE]) -> bool {
+        for i in 0..MAX_SIZE_DIRECTORY_NAME {
+            if dir_name[i] != b'\0' {
+                return true;
             }
         }
 
-        if !is_correct
+        return false;
+    }
+
+    fn delete_directory_command(&mut self, dir_name: [u8; ARGV_SIZE]) {
+        let mut name_size = 0;
+
+        for i in 0..ARGV_SIZE {
+            if dir_name[i] == b'\0' {
+                break;
+            }
+            name_size += 1;
+        }
+
+        if name_size == 0
         {
             print!("\n[Error] Specify a folder name!");
             return;
         }
 
-        let cur_dir = self.directory_list.directories[self.current_directory];
-        for i in 0..cur_dir.child_count {
-            let dir_to_check = self.directory_list.directories[cur_dir.child_indexes[i]];
-
-            let mut is_same = true;
-            for j in 0..MAX_SIZE_DIRECTORY_NAME {
-                if dir_to_check.name[j] != dir_name[j] {
-                    is_same = false;
-                    break;
-                }
-            }
-
-            if !is_same {
-                continue;
-            }
-
-            if self.directory_list.directories[dir_to_check.index].child_count > 0 {
-                print!("[Error] Count of childrens must be 0");
-                return;
-            }
-
-            self.directory_list.directories[self.current_directory].child_count -= 1;
-
-            self.directory_list.directories[dir_to_check.index] = Directory {
-                index: DELETED_INDEX_DIRECTORY,
-                name: [b' '; MAX_SIZE_DIRECTORY_NAME],
-                parent_index: DELETED_INDEX_DIRECTORY,
-                child_count: DELETED_INDEX_DIRECTORY,
-                child_indexes: [DELETED_INDEX_DIRECTORY; MAX_COUNT_CHILDREN_DIRECTORIES],
-                files_indexes: [DELETED_INDEX_FILE; MAX_COUNT_FILES_IN_FOLDER],
-            };
-
-            self.directory_list.directories[cur_dir.index].child_indexes[i] =
-                DELETED_INDEX_DIRECTORY;
-
-            print!(
-                "\n[Ok] Directory \"{}\" deleted succsessfully!",
-                core::str::from_utf8(&dir_name.clone())
-                    .unwrap()
-                    .trim_matches('\0')
-                    
-            );
-
+        if name_size > MAX_SIZE_DIRECTORY_NAME {
+            print!("\n[Error] The maximum size of the directory name is 10 characters");
             return;
         }
+
+        let cur_dir = self.directory_list.directories[self.current_directory];
+
+        let index_dir_to_delete = self.get_folder_index_by_name(dir_name);
+
+        if index_dir_to_delete == DELETED_INDEX_DIRECTORY {
+            print!(
+                "\n[Error] Directory \"{}\" not found!",
+                core::str::from_utf8(&dir_name).unwrap().trim_matches('\0')
+            );
+            return;
+        }
+
+        let dir_to_delete = self.directory_list.directories[self.current_directory].child_indexes[index_dir_to_delete];
+
+        if self.directory_list.directories[dir_to_delete].child_count > 0 {
+            print!("[Error] Count of childrens must be 0");
+            return;
+        }
+
+        self.directory_list.directories[self.current_directory].child_count -= 1;
+
+        self.directory_list.directories[dir_to_delete] = Directory {
+            index: DELETED_INDEX_DIRECTORY,
+            name: [b' '; MAX_SIZE_DIRECTORY_NAME],
+            parent_index: DELETED_INDEX_DIRECTORY,
+            child_count: DELETED_INDEX_DIRECTORY,
+            child_indexes: [DELETED_INDEX_DIRECTORY; MAX_COUNT_CHILDREN_DIRECTORIES],
+            files_indexes: [DELETED_INDEX_FILE; MAX_COUNT_FILES_IN_FOLDER],
+        };
+
+        self.directory_list.directories[cur_dir.index].child_indexes[index_dir_to_delete] = DELETED_INDEX_DIRECTORY;
+
+        print!(
+            "\n[Ok] Directory \"{}\" deleted succsessfully!",
+            core::str::from_utf8(&dir_name.clone())
+                .unwrap()
+                .trim_matches('\0')
+        );
     }
 
     fn change_directory_command(&mut self, argv: [u8; ARGV_SIZE]) {
@@ -440,7 +473,15 @@ impl Shell {
 
         for dir_index in cur_dir.child_indexes {
             let mut is_same = true;
+
+            if dir_index == DELETED_INDEX_DIRECTORY
+            {
+                continue;
+            }
+
             for i in 0..ARGV_SIZE {
+                
+                
                 if argv[i] == b'\0' {
                     break;
                 }
@@ -476,7 +517,12 @@ impl Shell {
 
     fn directory_tree_command(&mut self, current_directory: Directory, tab_count: usize) {
         println!();
-        for i in 0..current_directory.child_count {
+        for i in 0..MAX_COUNT_CHILDREN_DIRECTORIES {
+            if current_directory.child_indexes[i] == DELETED_INDEX_DIRECTORY
+            {
+                continue;
+            }
+
             let child_directory =
                 self.directory_list.directories[current_directory.child_indexes[i]];
 
@@ -496,11 +542,10 @@ impl Shell {
         }
     }
 
-    fn search_free_index_child_indexes(&mut self) -> usize
-    {
-        for i in 0..MAX_COUNT_CHILDREN_DIRECTORIES
-        {
-            if self.directory_list.directories[self.current_directory].child_indexes[i] == DELETED_INDEX_DIRECTORY
+    fn search_free_index_child_indexes(&mut self) -> usize {
+        for i in 0..MAX_COUNT_CHILDREN_DIRECTORIES {
+            if self.directory_list.directories[self.current_directory].child_indexes[i]
+                == DELETED_INDEX_DIRECTORY
             {
                 return i;
             }
@@ -516,6 +561,12 @@ impl Shell {
                 break;
             }
             name_size += 1;
+        }
+
+        if name_size == 0
+        {
+            print!("\n[Error] Specify a folder name!");
+            return;
         }
 
         if name_size > MAX_SIZE_DIRECTORY_NAME {
@@ -539,8 +590,7 @@ impl Shell {
 
         let free_index = self.search_free_index_child_indexes();
 
-        if free_index == DELETED_INDEX_DIRECTORY
-        {
+        if free_index == DELETED_INDEX_DIRECTORY {
             print!("\n[Error] There is not a free space!");
             return;
         }
@@ -558,10 +608,9 @@ impl Shell {
             directory.name[i] = argv[i];
         }
 
-
         self.directory_list.directories[dir_index] = directory;
-        self.directory_list.directories[self.current_directory].child_indexes
-            [free_index] = dir_index;
+        self.directory_list.directories[self.current_directory].child_indexes[free_index] =
+            dir_index;
 
         self.directory_list.directories[self.current_directory].child_count += 1;
 
@@ -658,25 +707,17 @@ impl Shell {
                 good_formatting();
             }
             37 =>
-            // key code arrow left
-            {
-
-            }
+                // key code arrow left
+                {}
             38 =>
-            // key code arrow up
-            {
-
-            }
+                // key code arrow up
+                {}
             39 =>
-            // key code arrow right
-            {
-                
-            }
+                // key code arrow right
+                {}
             40 =>
-            // key code arrow down
-            {
-                
-            }
+                // key code arrow down
+                {}
             8 =>
             // key code of backspace
             {
